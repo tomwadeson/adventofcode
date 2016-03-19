@@ -1,8 +1,8 @@
 module Day3 where
 
 import Prelude hiding (Either(..))
-import Data.List (nub)
 import Data.Maybe (fromMaybe)
+import qualified Data.Set as S
 
 data Direction = Up | Down | Left | Right
                deriving (Show)
@@ -25,11 +25,13 @@ walk (x, y) Down  = (x, y-1)
 walk (x, y) Left  = (x-1, y)
 walk (x, y) Right = (x+1, y)
 
-follow :: Location -> [Direction] -> [Location]
-follow = scanr (\x acc -> walk acc x)
+follow :: Location -> [Direction] -> (Location, S.Set Location)
+follow loc = foldr (\x (prev, acc) ->
+  let next = walk prev x
+  in  (next, S.insert next acc)) (loc, S.singleton loc)
 
 answer :: String -> String
 answer str = 
   let directions   = fromString str
-      uniqueHouses = (show . length . nub . follow (0, 0)) <$> directions 
+      uniqueHouses = show . S.size . snd . follow' (0,0) <$> directions
   in  fromMaybe "Bad input" uniqueHouses
