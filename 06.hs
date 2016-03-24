@@ -1,5 +1,9 @@
 module Day6 where
 
+import Text.ParserCombinators.ReadP
+import Data.Char (isDigit)
+import Control.Applicative
+
 data Instruction = Toggle Range
                  | TurnOff Range
                  | TurnOn Range
@@ -16,6 +20,9 @@ type Grid = [[Bulb]]
 
 mkGrid :: Int -> Int -> Grid
 mkGrid w h = replicate h . replicate w $ False
+
+answer :: Grid -> [Instruction] -> Grid
+answer = foldr (flip modifyLights)
 
 modifyLights :: Grid -> Instruction -> Grid
 modifyLights g i = map doRow $ zip g [0..]
@@ -35,10 +42,52 @@ inRange (Range (x1, y1) (x2, y2)) (cx, cy) =
   cx >= x1 && cx <= x2 && cy >= y1 && cy <= y2
 
 turnedOn :: Grid -> Int
-turnedOn = countProp (== True)
+turnedOn = sum . map (length . filter (== True))
 
-turnedOff :: Grid -> Int
-turnedOff = countProp (== False)
+parseInstructions :: ReadP [Instruction]
+parseInstructions = 
+  sepBy (parseToggle <|> parseTurnOn <|> parseTurnOff) $ satisfy (`elem` "\r\n\t ")
 
-countProp :: (Bool -> Bool) -> Grid -> Int
-countProp p g = sum . map (length . filter p) $ g
+parseToggle :: ReadP Instruction
+parseToggle = do
+  string "toggle"
+  range <- parseRange
+  return (Toggle range)
+
+parseTurnOn :: ReadP Instruction
+parseTurnOn = do
+  string "turn on"
+  range <- parseRange
+  return (TurnOn range)
+
+parseTurnOff :: ReadP Instruction
+parseTurnOff = do
+  string "turn off"
+  range <- parseRange
+  return (TurnOff range)
+
+parseRange :: ReadP Range
+parseRange = do
+  skipSpaces
+  topLeft <- parseCoordinate
+  string " through "
+  bottomRight <- parseCoordinate
+  return (Range topLeft bottomRight)
+
+parseCoordinate :: ReadP Coordinate
+parseCoordinate = do
+  x <- parseInteger
+  char ','
+  y <- parseInteger
+  return (x, y)
+
+parseInteger :: ReadP Int
+parseInteger = read <$> many1 (satisfy isDigit)
+
+main :: IO ()
+main = do
+  instructions <- (fst . last . readP_to_S parseInstructions) <$> getContents
+  let grid = answer (mkGrid 1000 1000) instructions
+  let numOfLightsOn = turnedOn grid
+  putStrLn $ "Lights on: " ++ show numOfLightsOn
+
