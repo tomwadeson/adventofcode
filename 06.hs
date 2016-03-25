@@ -1,48 +1,44 @@
 module Day6 where
 
+import qualified Data.Set as Set
 import Text.ParserCombinators.ReadP
+import Control.Applicative ((<|>))
 import Data.Char (isDigit)
-import Control.Applicative
+import Data.Foldable (foldl')
 
-data Instruction = Toggle Range
-                 | TurnOff Range
-                 | TurnOn Range
-                 deriving (Eq, Show)
+data Instruction = Toggle { range :: Range }
+                 | TurnOn { range :: Range }
+                 | TurnOff { range :: Range }
+                 deriving (Show)
 
-data Range = Range Coordinate Coordinate
-           deriving (Eq, Show)
+data Range = Range { topLeft :: Coordinate, bottomRight :: Coordinate }
+             deriving (Show)
 
 type Coordinate = (Int, Int)
 
+type Grid = Set.Set Coordinate
+
 type Bulb = Bool
 
-type Grid = [[Bulb]]
+expandCoords :: Range -> [Coordinate]
+expandCoords (Range (x1, y1) (x2, y2)) = [ (x, y) | x <- [x1..x2], y <- [y1..y2] ]
 
-mkGrid :: Int -> Int -> Grid
-mkGrid w h = replicate h . replicate w $ False
-
-answer :: Grid -> [Instruction] -> Grid
-answer = foldr (flip modifyLights)
-
-modifyLights :: Grid -> Instruction -> Grid
-modifyLights g i = map doRow $ zip g [0..]
-  where
-    doRow (row, x) = fst . foldr (\b (acc, y) ->
-                             let b' = apply i (x, y) b
-                                 y' = y+1
-                             in  (b' : acc, y')) ([], 0) $ row
-
-apply :: Instruction -> Coordinate -> Bulb -> Bulb
-apply (Toggle r) c  = if inRange r c then not else id
-apply (TurnOn r) c  = if inRange r c then const True else id
-apply (TurnOff r) c = if inRange r c then const False else id
-
-inRange :: Range -> Coordinate -> Bool
-inRange (Range (x1, y1) (x2, y2)) (cx, cy) =
-  cx >= x1 && cx <= x2 && cy >= y1 && cy <= y2
+mkGrid :: Grid
+mkGrid = Set.empty
 
 turnedOn :: Grid -> Int
-turnedOn = sum . map (length . filter (== True))
+turnedOn = Set.size
+
+performAll :: Grid -> [Instruction] -> Grid
+performAll = foldl' perform
+
+perform :: Grid -> Instruction -> Grid
+perform g i = foldl' (changeBulb i) g (expandCoords . range $ i)
+
+changeBulb :: Instruction -> Grid -> Coordinate -> Grid
+changeBulb (Toggle _) g c  = if Set.member c g then Set.delete c g else Set.insert c g
+changeBulb (TurnOn _) g c  = Set.insert c g
+changeBulb (TurnOff _) g c = Set.delete c g
 
 parseInstructions :: ReadP [Instruction]
 parseInstructions = 
@@ -86,8 +82,7 @@ parseInteger = read <$> many1 (satisfy isDigit)
 
 main :: IO ()
 main = do
+  let grid = mkGrid 
   instructions <- (fst . last . readP_to_S parseInstructions) <$> getContents
-  let grid = answer (mkGrid 1000 1000) instructions
-  let numOfLightsOn = turnedOn grid
-  putStrLn $ "Lights on: " ++ show numOfLightsOn
-
+  let litBulbs = turnedOn (performAll grid instructions)
+  putStrLn $ "Number of lit bulbs: " ++ show litBulbs
