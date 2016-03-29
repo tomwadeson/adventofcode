@@ -6,6 +6,8 @@ import Data.Foldable (foldl')
 import Data.List (delete)
 import Control.Applicative ((<$>), (<*>))
 import Data.Maybe (fromJust)
+import Data.Bits ((.&.), (.|.), complement, shift)
+import Text.ParserCombinators.ReadP
 
 data Node = Signal { label :: Label, value :: Int }
           | Operator { label :: Label, gate :: Gate }
@@ -13,6 +15,9 @@ data Node = Signal { label :: Label, value :: Int }
 
 data Gate = And Label Label
           | Or Label Label
+          | Not Label
+          | LShift Label Int
+          | RShift Label Int
           deriving (Show)
 
 newtype Label = Label String deriving (Eq, Ord, Show)
@@ -36,8 +41,11 @@ toGraph nodes = toGraph' nodes Map.empty
       (Operator l g) -> toGraph' ns (Map.insertWith (++) l (inputs g) c)
 
 inputs :: Gate -> [Label]
-inputs (And x y) = [x, y]
-inputs (Or x y)  = [x, y]
+inputs (And x y)    = [x, y]
+inputs (Or x y)     = [x, y]
+inputs (Not x)      = [x]
+inputs (LShift x _) = [x]
+inputs (RShift x _) = [x]
 
 -- Topological sort, using Kahn's algorithm.  Messy, unsafe, and inefficient implementation!
 -- See: https://en.wikipedia.org/wiki/Topological_sorting#Kahn.27s_algorithm
@@ -70,10 +78,22 @@ execute (Signal l v) r           = Map.insert l v r
 execute (Operator l (And x y)) r = 
   let xVal = Map.lookup x r
       yVal = Map.lookup y r
-      z    = (+) <$> xVal <*> yVal
+      z    = (.&.) <$> xVal <*> yVal
   in  Map.insert l (fromJust z) r
 execute (Operator l (Or x y))  r = 
   let xVal = Map.lookup x r
       yVal = Map.lookup y r
-      z    = (-) <$> xVal <*> yVal
+      z    = (.|.) <$> xVal <*> yVal
+  in  Map.insert l (fromJust z) r
+execute (Operator l (Not x ))  r = 
+  let xVal = Map.lookup x r
+      z    = (complement) <$> xVal
+  in  Map.insert l (fromJust z) r
+execute (Operator l (LShift x y))  r = 
+  let xVal = Map.lookup x r
+      z    = (shift y) <$> xVal
+  in  Map.insert l (fromJust z) r
+execute (Operator l (RShift x y))  r = 
+  let xVal = Map.lookup x r
+      z    = (shift (-y)) <$> xVal
   in  Map.insert l (fromJust z) r
