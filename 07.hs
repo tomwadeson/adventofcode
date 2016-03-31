@@ -5,9 +5,8 @@ import Text.ParserCombinators.ReadP
 import Control.Applicative ((<|>))
 import Data.Char (isLetter, isDigit)
 import Data.Foldable (foldl')
-import Data.Maybe (catMaybes, maybeToList, fromJust)
+import Data.Maybe (mapMaybe, maybeToList, fromJust)
 import Data.List (delete)
-import Debug.Trace (trace)
 import Data.Bits ((.&.), (.|.), complement, shiftL, shiftR)
 import qualified Data.Set as Set
 import qualified Data.Map.Strict as Map
@@ -41,8 +40,8 @@ toNodeTable = foldl' (\acc x -> Map.insert (label x) x acc) Map.empty
 
 inputs :: Node -> [Label]
 inputs (Wire i l)                = maybeToList $ output i
-inputs (Operator (And i1 i2) _)  = catMaybes $ map output [i1, i2]
-inputs (Operator (Or i1 i2) _)   = catMaybes $ map output [i1, i2]
+inputs (Operator (And i1 i2) _)  = mapMaybe output [i1, i2]
+inputs (Operator (Or i1 i2) _)   = mapMaybe output [i1, i2]
 inputs (Operator (Not i) _)      = maybeToList $ output i
 inputs (Operator (LShift _ i) _) = maybeToList $ output i
 inputs (Operator (RShift _ i) _) = maybeToList $ output i
@@ -71,12 +70,12 @@ topsort g = topsort' g (roots g) []
 runCircuit :: [Node] -> Map.Map Label Word16
 runCircuit nodes = let table              = toNodeTable nodes
                        dependencyOrdering = map (fromJust . (`Map.lookup` table)) . topsort . toGraph $ nodes
-                   in  foldl' (\acc x -> execute x acc) Map.empty dependencyOrdering
+                   in  foldl' (flip execute) Map.empty dependencyOrdering
 
 execute :: Node -> Map.Map Label Word16 -> Map.Map Label Word16
 execute (Wire i l) m                 = Map.insert l (value i m) m
-execute (Operator (And i1 i2) l) m   = Map.insert l ((value i1 m) .&. (value i2 m)) m
-execute (Operator (Or i1 i2) l) m    = Map.insert l ((value i1 m) .|. (value i2 m)) m
+execute (Operator (And i1 i2) l) m   = Map.insert l (value i1 m .&. value i2 m) m
+execute (Operator (Or i1 i2) l) m    = Map.insert l (value i1 m .|. value i2 m) m
 execute (Operator (Not i1) l) m      = Map.insert l (complement (value i1 m)) m
 execute (Operator (LShift s i1) l) m = Map.insert l (shiftL (value i1 m) s) m
 execute (Operator (RShift s i1) l) m = Map.insert l (shiftR (value i1 m) s) m
@@ -160,7 +159,7 @@ parseOutput = do
   return $ Output label
 
 parseLabel :: ReadP Label
-parseLabel = Label <$> munch1 (isLetter)
+parseLabel = Label <$> munch1 isLetter
 
 parseArrow :: ReadP String
 parseArrow = string " -> "
@@ -179,4 +178,3 @@ main = do
   nodes <- fst . last . readP_to_S parseNodes <$> getContents
   let result = Map.toList $ runCircuit nodes
   mapM_ print result
-
